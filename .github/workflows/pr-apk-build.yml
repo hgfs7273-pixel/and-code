@@ -21,8 +21,10 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - run: sdkmanager --licenses >/dev/null || true
-      - run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+      - run: |
+          sdk=/usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager
+          $sdk --licenses >/dev/null || true
+          $sdk "platform-tools" "platforms;android-35" "build-tools;35.0.0"
       # See release.yml for why this is AND_CODE_-prefixed rather than GITHUB_CLIENT_ID directly.
       - run: ./gradlew :app:testGithubDebugUnitTest :app:assembleGithubDebug
         env:
