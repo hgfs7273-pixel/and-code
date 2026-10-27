@@ -66,6 +66,7 @@ import com.yugahashimoto.andcode.core.ProvideSafeUriHandler
 import com.yugahashimoto.andcode.core.api.PermissionRequest
 import com.yugahashimoto.andcode.runtime.PermissionResponse
 import com.yugahashimoto.andcode.ui.theme.LocalThemeColors
+import com.yugahashimoto.andcode.ui.theme.ThemeColors
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -443,7 +444,7 @@ private fun MarkdownText(
                         contentColor = MaterialTheme.colorScheme.onSurface,
                     ) {
                         Text(
-                            text = block.code,
+                            text = rememberHighlightedCode(block.language, block.code),
                             modifier =
                                 Modifier
                                     .horizontalScroll(rememberScrollState())
@@ -542,6 +543,36 @@ private fun MarkdownText(
         }
     }
 }
+
+@Composable
+private fun rememberHighlightedCode(
+    language: String?,
+    code: String,
+): AnnotatedString {
+    val themeColors = LocalThemeColors.current
+    return remember(language, code, themeColors) {
+        val tokens = CodeHighlighter.highlight(language, code)
+        buildAnnotatedString {
+            for (token in tokens) {
+                val style = token.type.codeSpanStyle(themeColors) ?: continue
+                withStyle(style) { append(token.text) }
+            }
+        }
+    }
+}
+
+private fun CodeTokenType.codeSpanStyle(colors: ThemeColors): SpanStyle? =
+    when (this) {
+        CodeTokenType.Keyword -> SpanStyle(color = colors.accentBright)
+        CodeTokenType.String -> SpanStyle(color = colors.success)
+        CodeTokenType.Number -> SpanStyle(color = colors.warning)
+        CodeTokenType.Comment -> SpanStyle(color = colors.foregroundExtraMuted)
+        CodeTokenType.Function -> SpanStyle(color = colors.secondary)
+        CodeTokenType.DiffAdd -> SpanStyle(color = colors.success)
+        CodeTokenType.DiffRemove -> SpanStyle(color = colors.destructive)
+        CodeTokenType.DiffMeta -> SpanStyle(color = colors.accentBright)
+        CodeTokenType.Plain -> null
+    }
 
 internal data class DataImage(val mime: String, val base64: String)
 
