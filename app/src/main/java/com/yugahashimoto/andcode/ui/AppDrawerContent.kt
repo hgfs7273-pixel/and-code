@@ -32,10 +32,13 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -104,6 +107,8 @@ fun AppDrawerContent(
     onSelectAgent: (DrawerAgent) -> Unit = {},
     onDeleteSession: (String) -> Unit = {},
     onArchiveSession: (String) -> Unit = {},
+    /** Session id and the new title chosen by the user. */
+    onRenameSession: (String, String) -> Unit = { _, _ -> },
     onBatchDelete: (Set<String>) -> Unit = {},
     onBatchArchive: (Set<String>) -> Unit = {},
     collapsedSections: Set<String> = emptySet(),
@@ -112,6 +117,7 @@ fun AppDrawerContent(
 ) {
     var selectedSessionIds by remember { mutableStateOf(setOf<String>()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var renameTarget by remember { mutableStateOf<DrawerRecentSession?>(null) }
     val selectionMode = selectedSessionIds.isNotEmpty()
 
     fun toggleSelection(id: String) {
@@ -121,10 +127,6 @@ fun AppDrawerContent(
             } else {
                 selectedSessionIds + id
             }
-    }
-
-    fun enterSelectionMode(id: String) {
-        selectedSessionIds = setOf(id)
     }
 
     Surface(
@@ -239,8 +241,8 @@ fun AppDrawerContent(
                                                 selectionMode = selectionMode,
                                                 indented = true,
                                                 agent = session.agent,
+                                                onRename = { renameTarget = session },
                                                 onClick = { onOpenSession(session.id, session.title, session.runtimeId) },
-                                                onLongClick = { enterSelectionMode(session.id) },
                                                 onToggleSelection = { toggleSelection(session.id) },
                                             )
                                         }
@@ -287,6 +289,39 @@ fun AppDrawerContent(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    renameTarget?.let { target ->
+        var name by remember(target.id) { mutableStateOf(target.title) }
+        AlertDialog(
+            onDismissRequest = { renameTarget = null },
+            title = { Text(stringResource(R.string.rename_session_title)) },
+            text = {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.session_title_hint)) },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val trimmed = name.trim()
+                        if (trimmed.isNotEmpty()) onRenameSession(target.id, trimmed)
+                        renameTarget = null
+                    },
+                    enabled = name.isNotBlank(),
+                ) {
+                    Text(stringResource(R.string.save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameTarget = null }) {
                     Text(stringResource(R.string.cancel))
                 }
             },
@@ -606,58 +641,85 @@ private fun DrawerChatRow(
     indented: Boolean = false,
     /** Null for a remote runtime; the list now spans every agent, so rows have to say which. */
     agent: LocalAgent? = null,
+    onRename: () -> Unit = {},
     onClick: () -> Unit,
-    onLongClick: () -> Unit = {},
     onToggleSelection: () -> Unit = {},
 ) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .combinedClickable(
-                    onClick = if (selectionMode) onToggleSelection else onClick,
-                    onLongClick = if (selectionMode) null else onLongClick,
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        onClick = if (selectionMode) onToggleSelection else onClick,
+                        onLongClick =
+                            if (selectionMode) {
+                                null
+                            } else {
+                                { menuOpen = true }
+                            },
+                    )
+                    .padding(
+                        start = if (indented) 48.dp else 16.dp,
+                        end = 16.dp,
+                        top = 8.dp,
+                        bottom = 8.dp,
+                    ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (selectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleSelection() },
+                    modifier = Modifier.size(20.dp),
                 )
-                .padding(
-                    start = if (indented) 48.dp else 16.dp,
-                    end = 16.dp,
-                    top = 8.dp,
-                    bottom = 8.dp,
-                ),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        if (selectionMode) {
-            Checkbox(
-                checked = isSelected,
-                onCheckedChange = { onToggleSelection() },
-                modifier = Modifier.size(20.dp),
+                Spacer(Modifier.width(4.dp))
+            }
+            StatusDot(status = status)
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.width(4.dp))
+            if (hasAttention) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.error),
+                )
+            }
+            if (agent != null) {
+                Icon(
+                    painter = painterResource(agent.iconRes),
+                    contentDescription = stringResource(agent.displayNameRes),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
         }
-        StatusDot(status = status)
-        Text(
-            text = title,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (hasAttention) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.error),
+        DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.rename_session)) },
+                onClick = {
+                    menuOpen = false
+                    onRename()
+                },
             )
-        }
-        if (agent != null) {
-            Icon(
-                painter = painterResource(agent.iconRes),
-                contentDescription = stringResource(agent.displayNameRes),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(14.dp),
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.select)) },
+                onClick = {
+                    menuOpen = false
+                    onToggleSelection()
+                },
             )
         }
     }

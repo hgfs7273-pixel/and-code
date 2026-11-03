@@ -923,6 +923,22 @@ fun AndCodeApp(
                                 app.catalogRepository.refreshSessionsOnly()
                             }
                         },
+                        onRenameSession = { sessionId, newTitle ->
+                            voiceScope.launch {
+                                // Renaming on every target kept delete simple, but here it would
+                                // also land on sessions that share nothing, so only the owner runs.
+                                val ownerRuntimeId =
+                                    app.catalogRepository.allSessions.value
+                                        .firstOrNull { it.session.id == sessionId }
+                                        ?.runtimeId
+                                val targets = app.runtimeRegistry.targets.value
+                                val owner = ownerRuntimeId?.let { id -> targets.firstOrNull { it.id == id } }
+                                if (owner != null) {
+                                    runCatching { owner.renameSession(sessionId, newTitle) }
+                                    app.catalogRepository.refreshSessionsOnly()
+                                }
+                            }
+                        },
                         onBatchDelete = { sessionIds ->
                             voiceScope.launch {
                                 val targets = app.runtimeRegistry.targets.value
